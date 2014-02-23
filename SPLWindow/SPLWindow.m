@@ -33,8 +33,6 @@
 
 #include <dlfcn.h>
 
-#warning move into podspec
-
 static CGFloat recordIndicatorSize = 14.0;
 
 @interface SPLWindowScreenCaptureButton : UIControl
