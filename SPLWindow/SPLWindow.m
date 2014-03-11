@@ -101,7 +101,7 @@ static CGFloat recordIndicatorSize = 14.0;
     NSInteger minutes = floor(self.videoDuration / 60.0);
     NSInteger seconds = floor(fmod(self.videoDuration, 60.0));
 
-    NSString *durationText = [NSString stringWithFormat:@"%02d:%02d", minutes, seconds];
+    NSString *durationText = [NSString stringWithFormat:@"%02ld:%02ld", (long)minutes, (long)seconds];
     NSDictionary *attirbutes = @{
                                  NSForegroundColorAttributeName: [UIColor whiteColor],
                                  NSFontAttributeName: [UIFont boldSystemFontOfSize:17.0],
