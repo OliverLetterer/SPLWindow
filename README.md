@@ -2,8 +2,10 @@
 
 SPLWindow is a UIWindow subclass with the following features:
 
-- SPLWindow can highlight your touches during AirPlay mirroring.
-- Rage shake your device and SPLWindow can take a screenshot of your current visible view hierarchy or record a video of your devices screen. Screenshots can be annotated by drawing on them and video recording happens in real time and can be stopped by tapping the record indicator in the bottom right of your screen.
+- Touch highlighting during AirPlay mirroring.
+- Rage shake to take a screenshot: Screenshots can be annotated and send via mail.
+- Rage shake to record video: Record a video right on your device in real time and send it via mail.
+- Rage shake to show and edit [Tweaks](https://github.com/facebook/Tweaks).
 
 ## Warning
 
