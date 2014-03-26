@@ -33,6 +33,14 @@
 
 #include <dlfcn.h>
 
+@interface FBTweakStore : NSObject
++ (instancetype)sharedInstance;
+@end
+
+@interface FBTweakViewController : UINavigationController
+- (instancetype)initWithStore:(FBTweakStore *)store;
+@end
+
 static CGFloat recordIndicatorSize = 14.0;
 
 @interface SPLWindowScreenCaptureButton : UIControl
@@ -182,7 +190,8 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
 
 
 
-static BOOL isVideoCapturingAvailable;
+static BOOL tweakAvailable = NO;
+static BOOL isVideoCapturingAvailable = NO;
 
 typedef CVReturn(*CVPixelBufferCreateWithIOSurfaceFunction)(CFAllocatorRef allocator, CFTypeRef surface, CFDictionaryRef pixelBufferAttributes, CVPixelBufferRef *pixelBufferOut);
 static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface;
@@ -222,6 +231,16 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
     CVPixelBufferCreateWithIOSurface = (CVPixelBufferCreateWithIOSurfaceFunction)dlsym((void *)RTLD_NEXT, [NSString stringWithFormat:@"CVPixelBufferCreateWith%@%@", @"IO", @"Surface"].UTF8String);
 
     isVideoCapturingAvailable = isIOCaptureAvailable && CVPixelBufferCreateWithIOSurface != NULL;
+
+    Class FBTweakViewControllerClass = NSClassFromString(@"FBTweakViewController");
+    Class FBTweakStoreClass = NSClassFromString(@"FBTweakStore");
+
+    if (FBTweakStoreClass && FBTweakViewControllerClass) {
+        BOOL respondsToInitWithStore = class_respondsToSelector(FBTweakViewControllerClass, @selector(initWithStore:));
+        BOOL respondsToSharedInstance = class_respondsToSelector(objc_getMetaClass(NSStringFromClass(FBTweakStoreClass).UTF8String), @selector(sharedInstance));
+
+        tweakAvailable = respondsToInitWithStore && respondsToSharedInstance;
+    }
 }
 
 - (id)initWithFrame:(CGRect)frame
@@ -274,9 +293,18 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         UIActionSheet *actionSheet = [[UIActionSheet alloc] initWithTitle:@"Rage Shake"
                                                                  delegate:self
-                                                        cancelButtonTitle:@"Cancel"
+                                                        cancelButtonTitle:nil
                                                    destructiveButtonTitle:nil
-                                                        otherButtonTitles:@"Capture Screenshot", @"Record Video", nil];
+                                                        otherButtonTitles:nil];
+
+        if (tweakAvailable) {
+            [actionSheet addButtonWithTitle:@"Tweak"];
+        }
+
+        [actionSheet addButtonWithTitle:@"Capture Screenshot"];
+        [actionSheet addButtonWithTitle:@"Record Video"];
+        actionSheet.cancelButtonIndex = [actionSheet addButtonWithTitle:@"Cancel"];
+
         [actionSheet showInView:self];
     }
 }
@@ -609,13 +637,23 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
 - (void)actionSheet:(UIActionSheet *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex
 {
+    if (buttonIndex == actionSheet.cancelButtonIndex) {
+        return;
+    }
+
     UIImage *capturedScreenshot = self.capturedScreenshot;
     NSString *recursiveDescription = self.hierarchyDescription;
 
     self.capturedScreenshot = nil;
     self.hierarchyDescription = nil;
 
-    if (buttonIndex == 0) {
+    NSString *title = [actionSheet buttonTitleAtIndex:buttonIndex];
+
+    if ([title isEqualToString:@"Tweak"]) {
+        // Tweak
+        FBTweakViewController *viewController = [[NSClassFromString(@"FBTweakViewController") alloc] initWithStore:[NSClassFromString(@"FBTweakStore") sharedInstance]];
+        [self.topViewController presentViewController:viewController animated:YES completion:NULL];
+    } else if ([title isEqualToString:@"Capture Screenshot"]) {
         // Capture Screenshot
         SPLWindowAnnotateScreenshotViewController *viewController = [[SPLWindowAnnotateScreenshotViewController alloc] initWithScreenshot:capturedScreenshot];
         viewController.hierarchyDescription = recursiveDescription;
@@ -623,7 +661,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:viewController];
         [self.topViewController presentViewController:navigationController animated:YES completion:NULL];
-    } else if (buttonIndex == 1) {
+    } else if ([title isEqualToString:@"Record Video"]) {
         // record video
         if (!isVideoCapturingAvailable) {
             return;
