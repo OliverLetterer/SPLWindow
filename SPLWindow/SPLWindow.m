@@ -302,7 +302,11 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         }
 
         [actionSheet addButtonWithTitle:@"Capture Screenshot"];
-        [actionSheet addButtonWithTitle:@"Record Video"];
+
+        if (isVideoCapturingAvailable) {
+            [actionSheet addButtonWithTitle:@"Record Video"];
+        }
+
         actionSheet.cancelButtonIndex = [actionSheet addButtonWithTitle:@"Cancel"];
 
         [actionSheet showInView:self];
@@ -663,9 +667,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         [self.topViewController presentViewController:navigationController animated:YES completion:NULL];
     } else if ([title isEqualToString:@"Record Video"]) {
         // record video
-        if (!isVideoCapturingAvailable) {
-            return;
-        }
+        NSParameterAssert(isVideoCapturingAvailable);
 
         self.isRecordingVideo = YES;
         self.videoTransform = videoTransformFromInterfaceOrientation(self.topViewController.interfaceOrientation);
