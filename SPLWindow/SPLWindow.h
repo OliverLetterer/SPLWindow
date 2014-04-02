@@ -33,7 +33,7 @@
 
 /**
  Rage shake allows your user to shake the device to send and annotate a screenshot of the current visible screen.
- 
+
  Defaults to NO.
  */
 @property (nonatomic, assign, getter = isRageShakeEnabled) BOOL rageShakeEnabled;
@@ -42,5 +42,10 @@
  frameInterval used for internal CADisplayLink while recording video. Defaults to 2.
  */
 @property (atomic, assign) NSInteger frameInterval;
+
+/**
+ Adds a custom rage shake.
+ */
+- (void)addRageShake:(NSString *)rageShakeName withHandler:(dispatch_block_t)handler;
 
 @end

@@ -162,6 +162,9 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
 
 @interface SPLWindow () <MFMailComposeViewControllerDelegate, SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate>
 
+@property (nonatomic, strong) NSMutableArray *customRageShakes;
+@property (nonatomic, strong) NSMutableArray *customRageShakeHandlers;
+
 @property (nonatomic, strong) UIImage *capturedScreenshot;
 @property (nonatomic, strong) NSString *hierarchyDescription;
 
@@ -259,6 +262,9 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         _screenCaptureProcessingQueue = dispatch_queue_create("de.sparrow-labs.SPLWindow.screenCaptureProcessingQueue", DISPATCH_QUEUE_SERIAL);
         _frameInterval = 1;
 
+        _customRageShakes = [NSMutableArray array];
+        _customRageShakeHandlers = [NSMutableArray array];
+
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_screensDidChangeNotificationCallback:) name:UIScreenDidConnectNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_screensDidChangeNotificationCallback:) name:UIScreenDidDisconnectNotification object:nil];
     }
@@ -307,6 +313,10 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
             [actionSheet addButtonWithTitle:@"Record Video"];
         }
 
+        for (NSString *rageShake in self.customRageShakes) {
+            [actionSheet addButtonWithTitle:rageShake];
+        }
+
         actionSheet.cancelButtonIndex = [actionSheet addButtonWithTitle:@"Cancel"];
 
         [actionSheet showInView:self];
@@ -337,6 +347,17 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         [self.topViewController presentViewController:viewController animated:YES completion:NULL];
     }];
+}
+
+#pragma mark - Instance methods
+
+- (void)addRageShake:(NSString *)rageShakeName withHandler:(dispatch_block_t)handler
+{
+    NSParameterAssert(rageShakeName);
+    NSParameterAssert(handler);
+
+    [self.customRageShakes addObject:rageShakeName];
+    [self.customRageShakeHandlers addObject:handler];
 }
 
 #pragma mark - UIView
@@ -678,6 +699,14 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         [self addSubview:self.screenCaptureButton];
 
         [self performSelector:@selector(beginScreenRecording) onThread:[self.class displayThread] withObject:nil waitUntilDone:NO];
+    } else {
+        NSInteger index = [self.customRageShakes indexOfObject:title];
+        if (index == NSNotFound) {
+            return;
+        }
+        
+        dispatch_block_t handler = self.customRageShakeHandlers[index];
+        handler();
     }
 }
 
