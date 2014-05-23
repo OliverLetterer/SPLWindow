@@ -658,6 +658,13 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
     }];
 }
 
+#pragma mark - FBTweakViewControllerDelegate
+
+- (void)tweakViewControllerPressedDone:(FBTweakViewController *)tweakViewController
+{
+    [tweakViewController dismissViewControllerAnimated:YES completion:NULL];
+}
+
 #pragma mark - UIActionSheetDelegate
 
 - (void)actionSheet:(UIActionSheet *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex
@@ -677,6 +684,8 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
     if ([title isEqualToString:@"Tweak"]) {
         // Tweak
         FBTweakViewController *viewController = [[NSClassFromString(@"FBTweakViewController") alloc] initWithStore:[NSClassFromString(@"FBTweakStore") sharedInstance]];
+        [viewController setValue:self forKeyPath:@"tweaksDelegate"];
+
         [self.topViewController presentViewController:viewController animated:YES completion:NULL];
     } else if ([title isEqualToString:@"Capture Screenshot"]) {
         // Capture Screenshot
