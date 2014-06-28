@@ -133,6 +133,9 @@ static UIImageOrientation imageOrientationFromInterfaceOrientation(UIInterfaceOr
         case UIInterfaceOrientationLandscapeRight:
             return UIImageOrientationLeft;
             break;
+#ifdef __IPHONE_8_0
+        case UIInterfaceOrientationUnknown:
+#endif
         case UIInterfaceOrientationPortrait:
             return UIImageOrientationUp;
             break;
@@ -151,6 +154,9 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
         case UIInterfaceOrientationLandscapeRight:
             return CGAffineTransformMakeRotation(- M_PI_2);
             break;
+#ifdef __IPHONE_8_0
+        case UIInterfaceOrientationUnknown:
+#endif
         case UIInterfaceOrientationPortrait:
             return CGAffineTransformIdentity;
             break;
@@ -375,6 +381,9 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
     CGRect frame = self.screenCaptureButton.frame;
 
     switch (self.topViewController.interfaceOrientation) {
+#ifdef __IPHONE_8_0
+        case UIInterfaceOrientationUnknown:
+#endif
         case UIInterfaceOrientationPortrait:
             frame.origin.x = CGRectGetWidth(self.bounds) - CGRectGetWidth(frame) - 14.0;
             frame.origin.y = CGRectGetHeight(self.bounds) - CGRectGetHeight(frame) - 14.0;
@@ -683,7 +692,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
     if ([title isEqualToString:@"Tweak"]) {
         // Tweak
-        FBTweakViewController *viewController = [[NSClassFromString(@"FBTweakViewController") alloc] initWithStore:[NSClassFromString(@"FBTweakStore") sharedInstance]];
+        FBTweakViewController *viewController = [[NSClassFromString(@"FBTweakViewController") alloc] initWithStore:(id)[NSClassFromString(@"FBTweakStore") sharedInstance]];
         [viewController setValue:self forKeyPath:@"tweaksDelegate"];
 
         [self.topViewController presentViewController:viewController animated:YES completion:NULL];
