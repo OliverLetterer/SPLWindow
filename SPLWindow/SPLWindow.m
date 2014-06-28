@@ -124,27 +124,6 @@ static CGFloat recordIndicatorSize = 14.0;
 
 @end
 
-static UIImageOrientation imageOrientationFromInterfaceOrientation(UIInterfaceOrientation interfaceOrientation)
-{
-    switch (interfaceOrientation) {
-        case UIInterfaceOrientationLandscapeLeft:
-            return UIImageOrientationRight;
-            break;
-        case UIInterfaceOrientationLandscapeRight:
-            return UIImageOrientationLeft;
-            break;
-#ifdef __IPHONE_8_0
-        case UIInterfaceOrientationUnknown:
-#endif
-        case UIInterfaceOrientationPortrait:
-            return UIImageOrientationUp;
-            break;
-        case UIInterfaceOrientationPortraitUpsideDown:
-            return UIImageOrientationDown;
-            break;
-    }
-}
-
 static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrientation interfaceOrientation)
 {
     switch (interfaceOrientation) {
@@ -295,7 +274,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         screenshot = [[UIImage alloc] initWithCGImage:screenshot.CGImage
                                                 scale:[UIScreen mainScreen].scale
-                                          orientation:imageOrientationFromInterfaceOrientation(self.topViewController.interfaceOrientation)];
+                                          orientation:UIImageOrientationUp];
         UIGraphicsEndImageContext();
 
         NSString *recursiveDescription = [self valueForKey:[@[ @"recursive", @"Description" ] componentsJoinedByString:@""]];
@@ -376,11 +355,11 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         return;
     }
 
-    self.screenCaptureButton.transform = CGAffineTransformInvert(videoTransformFromInterfaceOrientation(self.topViewController.interfaceOrientation));
+    self.screenCaptureButton.transform = CGAffineTransformInvert(videoTransformFromInterfaceOrientation([UIApplication sharedApplication].statusBarOrientation));
     [self.screenCaptureButton sizeToFit];
     CGRect frame = self.screenCaptureButton.frame;
 
-    switch (self.topViewController.interfaceOrientation) {
+    switch ([UIApplication sharedApplication].statusBarOrientation) {
 #ifdef __IPHONE_8_0
         case UIInterfaceOrientationUnknown:
 #endif
@@ -709,7 +688,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         NSParameterAssert(isVideoCapturingAvailable);
 
         self.isRecordingVideo = YES;
-        self.videoTransform = videoTransformFromInterfaceOrientation(self.topViewController.interfaceOrientation);
+        self.videoTransform = videoTransformFromInterfaceOrientation([UIApplication sharedApplication].statusBarOrientation);
 
         self.screenCaptureButton = [[SPLWindowScreenCaptureButton alloc] initWithFrame:CGRectZero];
         [self.screenCaptureButton addTarget:self action:@selector(_userWantsToEndScreenCapture) forControlEvents:UIControlEventTouchUpInside];
