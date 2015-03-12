@@ -304,7 +304,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         actionSheet.cancelButtonIndex = [actionSheet addButtonWithTitle:@"Cancel"];
 
-        [actionSheet showInView:self];
+        [actionSheet showInView:self.rootViewController.view];
     }
 }
 
@@ -701,7 +701,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         if (index == NSNotFound) {
             return;
         }
-        
+
         dispatch_block_t handler = self.customRageShakeHandlers[index];
         handler();
     }
