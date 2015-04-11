@@ -23,11 +23,19 @@
 //  THE SOFTWARE.
 //
 
+#import <UIKit/UIKit.h>
+
+
+
+NS_ASSUME_NONNULL_BEGIN
+
 @interface SPLWindowTouchIndicator : UIView
 
 + (CGFloat)dimension;
 
-- (instancetype)init;
-- (instancetype)initWithFrame:(CGRect)frame UNAVAILABLE_ATTRIBUTE;
+- (instancetype)init NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithFrame:(CGRect)frame NS_UNAVAILABLE;
 
 @end
+
+NS_ASSUME_NONNULL_END

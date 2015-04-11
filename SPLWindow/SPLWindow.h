@@ -23,6 +23,12 @@
 //  THE SOFTWARE.
 //
 
+#import <UIKit/UIKit.h>
+
+
+
+NS_ASSUME_NONNULL_BEGIN
+
 @interface SPLWindow : UIWindow
 
 /**
@@ -49,3 +55,5 @@
 - (void)addRageShake:(NSString *)rageShakeName withHandler:(dispatch_block_t)handler;
 
 @end
+
+NS_ASSUME_NONNULL_END

@@ -23,7 +23,14 @@
 //  THE SOFTWARE.
 //
 
+#import <UIKit/UIKit.h>
+
 @class SPLWindowAnnotateScreenshotViewController;
+
+
+
+NS_ASSUME_NONNULL_BEGIN
+
 @protocol SPLWindowAnnotateScreenshotViewControllerDelegate <NSObject>
 
 - (void)screenshotViewControllerDidCancel:(SPLWindowAnnotateScreenshotViewController *)screenshotViewController;
@@ -35,11 +42,12 @@
 
 @interface SPLWindowAnnotateScreenshotViewController : UIViewController
 
-@property (nonatomic, strong) NSString *hierarchyDescription;
+@property (nonatomic, nullable) NSString *hierarchyDescription;
 @property (nonatomic, readonly) UIImage *screenshot;
-@property (nonatomic, weak) id<SPLWindowAnnotateScreenshotViewControllerDelegate> delegate;
+@property (nonatomic, weak, nullable) id<SPLWindowAnnotateScreenshotViewControllerDelegate> delegate;
 
 - (instancetype)initWithScreenshot:(UIImage *)screenshot;
 
 @end
 
+NS_ASSUME_NONNULL_END

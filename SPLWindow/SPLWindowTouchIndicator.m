@@ -37,12 +37,18 @@
 - (instancetype)init
 {
     CGFloat dimension = [SPLWindowTouchIndicator dimension];
-    
+
     if (self = [super initWithFrame:CGRectMake(0.0, 0.0, dimension, dimension)]) {
         self.userInteractionEnabled = NO;
         self.backgroundColor = [UIColor clearColor];
     }
     return self;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+    [self doesNotRecognizeSelector:_cmd];
+    return nil;
 }
 
 - (void)drawRect:(CGRect)rect
@@ -55,7 +61,7 @@
 
     [[UIColor colorWithWhite:0.0 alpha:0.3] setStroke];
     [path stroke];
-    
+
 }
 
 @end
