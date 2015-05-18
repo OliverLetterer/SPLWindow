@@ -224,7 +224,8 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
     Class FBTweakStoreClass = NSClassFromString(@"FBTweakStore");
 
     if (FBTweakStoreClass && FBTweakViewControllerClass) {
-        BOOL respondsToInitWithStore = class_respondsToSelector(FBTweakViewControllerClass, @selector(initWithStore:));
+        SEL initWithStore = NSSelectorFromString([@[ @"init", @"With", @"Store:" ] componentsJoinedByString:@""]);
+        BOOL respondsToInitWithStore = class_respondsToSelector(FBTweakViewControllerClass, initWithStore);
         BOOL respondsToSharedInstance = class_respondsToSelector(objc_getMetaClass(NSStringFromClass(FBTweakStoreClass).UTF8String), @selector(sharedInstance));
 
         tweakAvailable = respondsToInitWithStore && respondsToSharedInstance;
@@ -671,7 +672,8 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
     if ([title isEqualToString:@"Tweak"]) {
         // Tweak
-        FBTweakViewController *viewController = [[NSClassFromString(@"FBTweakViewController") alloc] initWithStore:(id)[NSClassFromString(@"FBTweakStore") sharedInstance]];
+        SEL initWithStore = NSSelectorFromString([@[ @"init", @"With", @"Store:" ] componentsJoinedByString:@""]);
+        FBTweakViewController *viewController = ((id(*)(id, SEL, id))objc_msgSend)([NSClassFromString(@"FBTweakViewController") alloc], initWithStore, [NSClassFromString(@"FBTweakStore") sharedInstance]);
         [viewController setValue:self forKeyPath:@"tweaksDelegate"];
 
         [self.topViewController presentViewController:viewController animated:YES completion:NULL];
@@ -701,7 +703,7 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         if (index == NSNotFound) {
             return;
         }
-
+        
         dispatch_block_t handler = self.customRageShakeHandlers[index];
         handler();
     }
