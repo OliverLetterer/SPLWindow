@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name          = 'SPLWindow'
-  spec.version       = '1.3.4'
+  spec.version       = '1.3.5'
   spec.platform      = :ios, '7.0'
   spec.license       = 'MIT'
   spec.source        = { :git => 'https://github.com/OliverLetterer/SPLWindow.git', :tag => spec.version.to_s }
