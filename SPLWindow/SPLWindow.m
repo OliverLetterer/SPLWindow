@@ -31,6 +31,10 @@
 #import <MessageUI/MessageUI.h>
 #import <AVFoundation/AVFoundation.h>
 
+#ifdef __IPHONE_9_0
+#import <ReplayKit/ReplayKit.h>
+#endif
+
 #include <dlfcn.h>
 
 @interface FBTweakStore : NSObject
@@ -145,7 +149,7 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
     }
 }
 
-@interface SPLWindow () <MFMailComposeViewControllerDelegate, SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate>
+@interface SPLWindow () <SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate, RPPreviewViewControllerDelegate, MFMailComposeViewControllerDelegate>
 
 @property (nonatomic, strong) NSMutableArray *customRageShakes;
 @property (nonatomic, strong) NSMutableArray *customRageShakeHandlers;
@@ -160,18 +164,9 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
 @property (nonatomic, assign) BOOL isCapturingScreenshot;
 
 @property (atomic, assign) BOOL isRecordingVideo;
-@property (atomic, strong) dispatch_queue_t screenCaptureProcessingQueue;
 
-@property (atomic, strong) AVAssetWriter *assetWriter;
-@property (atomic, strong) AVAssetWriterInput *assetWriterInput;
-@property (atomic, strong) AVAssetWriterInputPixelBufferAdaptor *pixelBufferAdaptor;
-
-@property (atomic, strong) CADisplayLink *displayLink;
-@property (atomic, assign) CFTimeInterval videoDuration;
-@property (atomic, assign) CGAffineTransform videoTransform;
-@property (atomic, strong) NSURL *videoURL;
-@property (nonatomic, assign) BOOL hasCapturedFirstVideoFrame;
-
+@property (nonatomic, strong) NSDate *videoRecordingStartTime;
+@property (nonatomic, strong) NSTimer *videoRecordingTimer;
 @property (nonatomic, strong) SPLWindowScreenCaptureButton *screenCaptureButton;
 
 @end
@@ -179,10 +174,6 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
 
 
 static BOOL tweakAvailable = NO;
-static BOOL isVideoCapturingAvailable = NO;
-
-typedef CVReturn(*CVPixelBufferCreateWithIOSurfaceFunction)(CFAllocatorRef allocator, CFTypeRef surface, CFDictionaryRef pixelBufferAttributes, CVPixelBufferRef *pixelBufferOut);
-static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface;
 
 @implementation SPLWindow
 
@@ -215,11 +206,6 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         return;
     }
 
-    BOOL isIOCaptureAvailable = class_respondsToSelector(objc_getMetaClass("UIWindow"), NSSelectorFromString([NSString stringWithFormat:@"create%@Surface", @"ScreenIO"]));
-    CVPixelBufferCreateWithIOSurface = (CVPixelBufferCreateWithIOSurfaceFunction)dlsym((void *)RTLD_NEXT, [NSString stringWithFormat:@"CVPixelBufferCreateWith%@%@", @"IO", @"Surface"].UTF8String);
-
-    isVideoCapturingAvailable = isIOCaptureAvailable && CVPixelBufferCreateWithIOSurface != NULL;
-
     Class FBTweakViewControllerClass = NSClassFromString(@"FBTweakViewController");
     Class FBTweakStoreClass = NSClassFromString(@"FBTweakStore");
 
@@ -241,11 +227,6 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
             }
         }
 
-        if (!isVideoCapturingAvailable) {
-            NSLog(@"[SPLWindow] video caturing has been disabled because the runtime doesn't supports SPLWindows screen capturing mechanismn anymore.");
-        }
-
-        _screenCaptureProcessingQueue = dispatch_queue_create("de.sparrow-labs.SPLWindow.screenCaptureProcessingQueue", DISPATCH_QUEUE_SERIAL);
         _frameInterval = 1;
 
         _customRageShakes = [NSMutableArray array];
@@ -295,9 +276,11 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
         [actionSheet addButtonWithTitle:@"Capture Screenshot"];
 
-        if (isVideoCapturingAvailable) {
+#ifdef __IPHONE_9_0
+        if (NSClassFromString(@"RPScreenRecorder") != Nil) {
             [actionSheet addButtonWithTitle:@"Record Video"];
         }
+#endif
 
         for (NSString *rageShake in self.customRageShakes) {
             [actionSheet addButtonWithTitle:rageShake];
@@ -489,162 +472,34 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
 
 #pragma mark - video capturing
 
-+ (void)displayThreadEntryPoint:(id)object
+- (void)_videoCaptureTick:(NSTimer *)sender
 {
-    @autoreleasepool {
-        [[NSThread currentThread] setName:@"SPLWindowDisplayThread"];
-
-        NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
-        [runLoop addPort:[NSMachPort port] forMode:NSDefaultRunLoopMode];
-        [runLoop run];
-    }
-}
-
-+ (NSThread *)displayThread
-{
-    static NSThread *displayThread = nil;
-    static dispatch_once_t oncePredicate;
-    dispatch_once(&oncePredicate, ^{
-        displayThread = [[NSThread alloc] initWithTarget:self selector:@selector(displayThreadEntryPoint:) object:nil];
-        [displayThread start];
-    });
-
-    return displayThread;
-}
-
-- (void)beginScreenRecording
-{
-    NSParameterAssert([NSThread currentThread] == [self.class displayThread]);
-
-    NSString *filepath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"RageShake-%@.mp4", [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterMediumStyle timeStyle:NSDateFormatterMediumStyle]]];
-    self.videoURL = [NSURL fileURLWithPath:filepath];
-
-    NSError *error = nil;
-    _assetWriter = [[AVAssetWriter alloc] initWithURL:self.videoURL fileType:AVFileTypeMPEG4 error:&error];
-    NSParameterAssert(error == nil);
-    NSParameterAssert(_assetWriter);
-
-    CGFloat scale = [UIScreen mainScreen].scale;
-    CGSize size = CGSizeApplyAffineTransform(self.bounds.size, CGAffineTransformMakeScale(scale, scale));
-    NSDictionary *videoSettings = @{
-                                    AVVideoCodecKey: AVVideoCodecH264,
-                                    AVVideoWidthKey: @(size.width),
-                                    AVVideoHeightKey: @(size.height),
-                                    };
-
-    _assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
-    NSParameterAssert(_assetWriterInput);
-
-    _assetWriterInput.transform = self.videoTransform;
-    _assetWriterInput.expectsMediaDataInRealTime = YES;
-    NSParameterAssert([_assetWriter canAddInput:_assetWriterInput]);
-    [_assetWriter addInput:_assetWriterInput];
-
-    NSDictionary *bufferAttributes = @{
-                                       (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
-                                       };
-    _pixelBufferAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:_assetWriterInput
-                                                                                           sourcePixelBufferAttributes:bufferAttributes];
-
-    self.videoDuration = 0.0;
-    self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(captureScreenshot:)];
-    self.displayLink.frameInterval = self.frameInterval;
-    [self.displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-
-    [_assetWriter startWriting];
-    [_assetWriter startSessionAtSourceTime:CMTimeMakeWithSeconds(0.0, 120.0)];
-}
-
-- (void)captureScreenshot:(CADisplayLink *)displayLink
-{
-    NSParameterAssert([NSThread currentThread] == [self.class displayThread]);
-
-    CFTimeInterval timestamp = displayLink.timestamp;
-    CFTypeRef surface = ((CFTypeRef(*)(id, SEL))objc_msgSend)([UIWindow class], NSSelectorFromString([NSString stringWithFormat:@"create%@Surface", @"ScreenIO"]));
-
-    CVPixelBufferRef buffer = NULL;
-    NSDictionary *bufferAttributes = @{
-                                       (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
-                                       };
-
-    CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, (__bridge CFDictionaryRef)bufferAttributes, &buffer);
-    NSParameterAssert(buffer);
-
-    dispatch_async(self.screenCaptureProcessingQueue, ^{
-        static CFTimeInterval lastTimestamp = 0.0;
-        if (!self.hasCapturedFirstVideoFrame) {
-            lastTimestamp = timestamp;
-            self.hasCapturedFirstVideoFrame = YES;
-        }
-
-        CGFloat frameDuration = timestamp - lastTimestamp;
-        lastTimestamp = timestamp;
-
-        CGFloat currentTimestamp = self.videoDuration + frameDuration;
-        self.videoDuration = currentTimestamp;
-
-        CMTime time = CMTimeMakeWithSeconds(currentTimestamp, 120.0);
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.screenCaptureButton.videoDuration = currentTimestamp;
-        });
-
-        __unused BOOL success = [_pixelBufferAdaptor appendPixelBuffer:buffer withPresentationTime:time];
-        NSParameterAssert(success);
-
-        CVPixelBufferRelease(buffer);
-    });
-
-    CFRelease(surface);
+    self.screenCaptureButton.videoDuration = fabs(self.videoRecordingStartTime.timeIntervalSinceNow);
 }
 
 - (void)endScreenRecording
 {
-    NSParameterAssert([NSThread currentThread] == [self.class displayThread]);
+    self.isRecordingVideo = YES;
 
-    if (!self.displayLink) {
+    [self.videoRecordingTimer invalidate], self.videoRecordingTimer = nil;
+    [self.screenCaptureButton removeFromSuperview], self.screenCaptureButton = nil;
+
+#ifdef __IPHONE_9_0
+
+    if (![RPScreenRecorder sharedRecorder].isRecording) {
         return;
     }
 
-    [self.displayLink invalidate];
-    self.displayLink = nil;
-
-    dispatch_async(self.screenCaptureProcessingQueue, ^{
-        self.hasCapturedFirstVideoFrame = NO;
-
-        [_assetWriterInput markAsFinished];
-        [_assetWriter finishWritingWithCompletionHandler:^{
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.screenCaptureButton removeFromSuperview], self.screenCaptureButton = nil;
-
-                MFMailComposeViewController *viewController = [[MFMailComposeViewController alloc] init];
-
-                [viewController setSubject:[NSString stringWithFormat:@"Rage Shake - %@", [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterMediumStyle timeStyle:NSDateFormatterShortStyle]]];
-
-                [viewController addAttachmentData:[NSData dataWithContentsOfURL:_assetWriter.outputURL] mimeType:@"video/mp4" fileName:@"video.mp4"];
-                viewController.mailComposeDelegate = self;
-
-                [self.topViewController presentViewController:viewController animated:YES completion:NULL];
-
-                _assetWriter = nil;
-                _assetWriterInput = nil;
-                _pixelBufferAdaptor = nil;
-            });
-        }];
-    });
-}
-
-#pragma mark - MFMailComposeViewControllerDelegate
-
-- (void)mailComposeController:(MFMailComposeViewController *)controller didFinishWithResult:(MFMailComposeResult)result error:(NSError *)error
-{
-    [controller dismissViewControllerAnimated:YES completion:^{
-        self.isRecordingVideo = NO;
-        self.isCapturingScreenshot = NO;
-
-        [[NSFileManager defaultManager] removeItemAtURL:self.videoURL error:NULL];
-        self.videoURL = nil;
+    [[RPScreenRecorder sharedRecorder] stopRecordingWithHandler:^(RPPreviewViewController * __nullable previewViewController, NSError * __nullable error) {
+        if (error) {
+            NSLog(@"[SPLWindow] startRecording failed: %@", error);
+        } else if (previewViewController != nil) {
+            previewViewController.previewControllerDelegate = self;
+            [self.topViewController presentViewController:previewViewController animated:YES completion:NULL];
+        }
     }];
+
+#endif
 }
 
 #pragma mark - FBTweakViewControllerDelegate
@@ -686,34 +541,56 @@ static CVPixelBufferCreateWithIOSurfaceFunction CVPixelBufferCreateWithIOSurface
         UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:viewController];
         [self.topViewController presentViewController:navigationController animated:YES completion:NULL];
     } else if ([title isEqualToString:@"Record Video"]) {
-        // record video
-        NSParameterAssert(isVideoCapturingAvailable);
+#ifdef __IPHONE_9_0
+        [[RPScreenRecorder sharedRecorder] startRecordingWithMicrophoneEnabled:NO handler:^(NSError * __nullable error) {
+            if (error) {
+                [self endScreenRecording];
+                NSLog(@"[SPLWindow] startRecording failed: %@", error);
+                return;
+            }
 
-        self.isRecordingVideo = YES;
-        self.videoTransform = videoTransformFromInterfaceOrientation([UIApplication sharedApplication].statusBarOrientation);
+            self.isRecordingVideo = YES;
+            self.videoRecordingStartTime = [NSDate date];
+            self.videoRecordingTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(_videoCaptureTick:) userInfo:nil repeats:YES];
 
-        self.screenCaptureButton = [[SPLWindowScreenCaptureButton alloc] initWithFrame:CGRectZero];
-        [self.screenCaptureButton addTarget:self action:@selector(_userWantsToEndScreenCapture) forControlEvents:UIControlEventTouchUpInside];
-        [self.screenCaptureButton sizeToFit];
-        [self addSubview:self.screenCaptureButton];
-
-        [self performSelector:@selector(beginScreenRecording) onThread:[self.class displayThread] withObject:nil waitUntilDone:NO];
+            self.screenCaptureButton = [[SPLWindowScreenCaptureButton alloc] initWithFrame:CGRectZero];
+            [self.screenCaptureButton addTarget:self action:@selector(_userWantsToEndScreenCapture) forControlEvents:UIControlEventTouchUpInside];
+            [self.screenCaptureButton sizeToFit];
+            [self addSubview:self.screenCaptureButton];
+        }];
+#endif
     } else {
         NSInteger index = [self.customRageShakes indexOfObject:title];
         if (index == NSNotFound) {
             return;
         }
-        
+
         dispatch_block_t handler = self.customRageShakeHandlers[index];
         handler();
     }
+}
+
+#pragma mark - MFMailComposeViewControllerDelegate
+
+- (void)mailComposeController:(MFMailComposeViewController *)controller didFinishWithResult:(MFMailComposeResult)result error:(nullable NSError *)error
+{
+    if (error != nil) {
+        NSLog(@"[SPLWindow] mailComposeController failed: %@", error);
+    }
+}
+
+#pragma mark - RPPreviewViewControllerDelegate
+
+- (void)previewControllerDidFinish:(RPPreviewViewController *)previewController
+{
+    [previewController dismissViewControllerAnimated:YES completion:nil];
 }
 
 #pragma mark - Private category implementation ()
 
 - (void)_userWantsToEndScreenCapture
 {
-    [self performSelector:@selector(endScreenRecording) onThread:[self.class displayThread] withObject:nil waitUntilDone:NO];
+    [self endScreenRecording];
 }
 
 - (void)_screensDidChangeNotificationCallback:(NSNotification *)notification

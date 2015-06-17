@@ -45,10 +45,14 @@
     return self;
 }
 
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+    return [super initWithCoder:aDecoder];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame
 {
-    [self doesNotRecognizeSelector:_cmd];
-    return nil;
+    return [super initWithFrame:frame];
 }
 
 - (void)drawRect:(CGRect)rect
