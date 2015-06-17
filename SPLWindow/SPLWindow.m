@@ -149,7 +149,11 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
     }
 }
 
-@interface SPLWindow () <SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate, RPPreviewViewControllerDelegate, MFMailComposeViewControllerDelegate>
+@interface SPLWindow () <SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate, MFMailComposeViewControllerDelegate
+#ifdef __IPHONE_9_0
+, RPPreviewViewControllerDelegate
+#endif
+>
 
 @property (nonatomic, strong) NSMutableArray *customRageShakes;
 @property (nonatomic, strong) NSMutableArray *customRageShakeHandlers;
@@ -581,10 +585,12 @@ static BOOL tweakAvailable = NO;
 
 #pragma mark - RPPreviewViewControllerDelegate
 
+#ifdef __IPHONE_9_0
 - (void)previewControllerDidFinish:(RPPreviewViewController *)previewController
 {
     [previewController dismissViewControllerAnimated:YES completion:nil];
 }
+#endif
 
 #pragma mark - Private category implementation ()
 
