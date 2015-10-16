@@ -30,10 +30,7 @@
 #import <objc/message.h>
 #import <MessageUI/MessageUI.h>
 #import <AVFoundation/AVFoundation.h>
-
-#ifdef __IPHONE_9_0
 #import <ReplayKit/ReplayKit.h>
-#endif
 
 #include <dlfcn.h>
 
@@ -149,11 +146,7 @@ static CGAffineTransform videoTransformFromInterfaceOrientation(UIInterfaceOrien
     }
 }
 
-@interface SPLWindow () <SPLWindowAnnotateScreenshotViewControllerDelegate, UIActionSheetDelegate, MFMailComposeViewControllerDelegate
-#ifdef __IPHONE_9_0
-, RPPreviewViewControllerDelegate
-#endif
->
+@interface SPLWindow () <SPLWindowAnnotateScreenshotViewControllerDelegate, MFMailComposeViewControllerDelegate, RPPreviewViewControllerDelegate>
 
 @property (nonatomic, strong) NSMutableArray *customRageShakes;
 @property (nonatomic, strong) NSMutableArray *customRageShakeHandlers;
@@ -268,31 +261,63 @@ static BOOL tweakAvailable = NO;
         self.capturedScreenshot = screenshot;
         self.hierarchyDescription = recursiveDescription;
 
-        UIActionSheet *actionSheet = [[UIActionSheet alloc] initWithTitle:@"Rage Shake"
-                                                                 delegate:self
-                                                        cancelButtonTitle:nil
-                                                   destructiveButtonTitle:nil
-                                                        otherButtonTitles:nil];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Rage Shake" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+        [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"Cancel", @"") style:UIAlertActionStyleCancel handler:nil]];
 
         if (tweakAvailable) {
-            [actionSheet addButtonWithTitle:@"Tweak"];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Tweak" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                SEL initWithStore = NSSelectorFromString([@[ @"init", @"With", @"Store:" ] componentsJoinedByString:@""]);
+                FBTweakViewController *viewController = ((id(*)(id, SEL, id))objc_msgSend)([NSClassFromString(@"FBTweakViewController") alloc], initWithStore, [NSClassFromString(@"FBTweakStore") sharedInstance]);
+                [viewController setValue:self forKeyPath:@"tweaksDelegate"];
+
+                [self.topViewController presentViewController:viewController animated:YES completion:NULL];
+            }]];
         }
 
-        [actionSheet addButtonWithTitle:@"Capture Screenshot"];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Capture Screenshot" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            UIImage *capturedScreenshot = self.capturedScreenshot;
+            NSString *recursiveDescription = self.hierarchyDescription;
 
-#ifdef __IPHONE_9_0
+            self.capturedScreenshot = nil;
+            self.hierarchyDescription = nil;
+
+            SPLWindowAnnotateScreenshotViewController *viewController = [[SPLWindowAnnotateScreenshotViewController alloc] initWithScreenshot:capturedScreenshot];
+            viewController.hierarchyDescription = recursiveDescription;
+            viewController.delegate = self;
+
+            UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:viewController];
+            [self.topViewController presentViewController:navigationController animated:YES completion:NULL];
+        }]];
+
         if (NSClassFromString(@"RPScreenRecorder") != Nil) {
-            [actionSheet addButtonWithTitle:@"Record Video"];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Record Video" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [[RPScreenRecorder sharedRecorder] startRecordingWithMicrophoneEnabled:NO handler:^(NSError * __nullable error) {
+                    if (error) {
+                        [self endScreenRecording];
+                        NSLog(@"[SPLWindow] startRecording failed: %@", error);
+                        return;
+                    }
+
+                    self.isRecordingVideo = YES;
+                    self.videoRecordingStartTime = [NSDate date];
+                    self.videoRecordingTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(_videoCaptureTick:) userInfo:nil repeats:YES];
+
+                    self.screenCaptureButton = [[SPLWindowScreenCaptureButton alloc] initWithFrame:CGRectZero];
+                    [self.screenCaptureButton addTarget:self action:@selector(_userWantsToEndScreenCapture) forControlEvents:UIControlEventTouchUpInside];
+                    [self.screenCaptureButton sizeToFit];
+                    [self addSubview:self.screenCaptureButton];
+                }];
+            }]];
         }
-#endif
 
-        for (NSString *rageShake in self.customRageShakes) {
-            [actionSheet addButtonWithTitle:rageShake];
-        }
+        [self.customRageShakeHandlers enumerateObjectsUsingBlock:^(NSString *rageShake, NSUInteger idx, BOOL * _Nonnull stop) {
+            [alert addAction:[UIAlertAction actionWithTitle:rageShake style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                dispatch_block_t handler = self.customRageShakeHandlers[idx];
+                handler();
+            }]];
+        }];
 
-        actionSheet.cancelButtonIndex = [actionSheet addButtonWithTitle:@"Cancel"];
-
-        [actionSheet showInView:self.rootViewController.view];
+        [self.topViewController presentViewController:alert animated:YES completion:nil];
     }
 }
 
@@ -488,8 +513,6 @@ static BOOL tweakAvailable = NO;
     [self.videoRecordingTimer invalidate], self.videoRecordingTimer = nil;
     [self.screenCaptureButton removeFromSuperview], self.screenCaptureButton = nil;
 
-#ifdef __IPHONE_9_0
-
     if (![RPScreenRecorder sharedRecorder].isRecording) {
         return;
     }
@@ -502,8 +525,6 @@ static BOOL tweakAvailable = NO;
             [self.topViewController presentViewController:previewViewController animated:YES completion:NULL];
         }
     }];
-
-#endif
 }
 
 #pragma mark - FBTweakViewControllerDelegate
@@ -511,67 +532,6 @@ static BOOL tweakAvailable = NO;
 - (void)tweakViewControllerPressedDone:(FBTweakViewController *)tweakViewController
 {
     [tweakViewController dismissViewControllerAnimated:YES completion:NULL];
-}
-
-#pragma mark - UIActionSheetDelegate
-
-- (void)actionSheet:(UIActionSheet *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex
-{
-    if (buttonIndex == actionSheet.cancelButtonIndex) {
-        return;
-    }
-
-    UIImage *capturedScreenshot = self.capturedScreenshot;
-    NSString *recursiveDescription = self.hierarchyDescription;
-
-    self.capturedScreenshot = nil;
-    self.hierarchyDescription = nil;
-
-    NSString *title = [actionSheet buttonTitleAtIndex:buttonIndex];
-
-    if ([title isEqualToString:@"Tweak"]) {
-        // Tweak
-        SEL initWithStore = NSSelectorFromString([@[ @"init", @"With", @"Store:" ] componentsJoinedByString:@""]);
-        FBTweakViewController *viewController = ((id(*)(id, SEL, id))objc_msgSend)([NSClassFromString(@"FBTweakViewController") alloc], initWithStore, [NSClassFromString(@"FBTweakStore") sharedInstance]);
-        [viewController setValue:self forKeyPath:@"tweaksDelegate"];
-
-        [self.topViewController presentViewController:viewController animated:YES completion:NULL];
-    } else if ([title isEqualToString:@"Capture Screenshot"]) {
-        // Capture Screenshot
-        SPLWindowAnnotateScreenshotViewController *viewController = [[SPLWindowAnnotateScreenshotViewController alloc] initWithScreenshot:capturedScreenshot];
-        viewController.hierarchyDescription = recursiveDescription;
-        viewController.delegate = self;
-
-        UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:viewController];
-        [self.topViewController presentViewController:navigationController animated:YES completion:NULL];
-    } else if ([title isEqualToString:@"Record Video"]) {
-#ifdef __IPHONE_9_0
-        [[RPScreenRecorder sharedRecorder] startRecordingWithMicrophoneEnabled:NO handler:^(NSError * __nullable error) {
-            if (error) {
-                [self endScreenRecording];
-                NSLog(@"[SPLWindow] startRecording failed: %@", error);
-                return;
-            }
-
-            self.isRecordingVideo = YES;
-            self.videoRecordingStartTime = [NSDate date];
-            self.videoRecordingTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(_videoCaptureTick:) userInfo:nil repeats:YES];
-
-            self.screenCaptureButton = [[SPLWindowScreenCaptureButton alloc] initWithFrame:CGRectZero];
-            [self.screenCaptureButton addTarget:self action:@selector(_userWantsToEndScreenCapture) forControlEvents:UIControlEventTouchUpInside];
-            [self.screenCaptureButton sizeToFit];
-            [self addSubview:self.screenCaptureButton];
-        }];
-#endif
-    } else {
-        NSInteger index = [self.customRageShakes indexOfObject:title];
-        if (index == NSNotFound) {
-            return;
-        }
-
-        dispatch_block_t handler = self.customRageShakeHandlers[index];
-        handler();
-    }
 }
 
 #pragma mark - MFMailComposeViewControllerDelegate
@@ -585,12 +545,10 @@ static BOOL tweakAvailable = NO;
 
 #pragma mark - RPPreviewViewControllerDelegate
 
-#ifdef __IPHONE_9_0
 - (void)previewControllerDidFinish:(RPPreviewViewController *)previewController
 {
     [previewController dismissViewControllerAnimated:YES completion:nil];
 }
-#endif
 
 #pragma mark - Private category implementation ()
 
