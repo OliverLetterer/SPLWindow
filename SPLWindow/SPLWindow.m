@@ -310,12 +310,14 @@ static BOOL tweakAvailable = NO;
             }]];
         }
 
-        [self.customRageShakeHandlers enumerateObjectsUsingBlock:^(NSString *rageShake, NSUInteger idx, BOOL * _Nonnull stop) {
+        [self.customRageShakes enumerateObjectsUsingBlock:^(NSString *rageShake, NSUInteger idx, BOOL * _Nonnull stop) {
             [alert addAction:[UIAlertAction actionWithTitle:rageShake style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                 dispatch_block_t handler = self.customRageShakeHandlers[idx];
                 handler();
             }]];
         }];
+
+        alert.popoverPresentationController.sourceView = self.topViewController.view;
 
         [self.topViewController presentViewController:alert animated:YES completion:nil];
     }
