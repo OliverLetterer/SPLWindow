@@ -512,8 +512,8 @@ static BOOL tweakAvailable = NO;
 {
     self.isRecordingVideo = YES;
 
-    [self.videoRecordingTimer invalidate], self.videoRecordingTimer = nil;
-    [self.screenCaptureButton removeFromSuperview], self.screenCaptureButton = nil;
+    [self.videoRecordingTimer invalidate]; self.videoRecordingTimer = nil;
+    [self.screenCaptureButton removeFromSuperview]; self.screenCaptureButton = nil;
 
     if (![RPScreenRecorder sharedRecorder].isRecording) {
         return;
